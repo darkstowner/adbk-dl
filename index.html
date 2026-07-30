@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Classical Archive Downloader</title>
+<style>
+  :root {
+    --bg: #14181c;
+    --card: #1e242b;
+    --accent: #7fa8c9;
+    --accent-dark: #5c86a8;
+    --text: #e7ecef;
+    --muted: #8fa0ab;
+    --error: #d97878;
+    --success: #7cbf8e;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  .card {
+    width: 100%;
+    max-width: 480px;
+    background: var(--card);
+    border-radius: 14px;
+    padding: 32px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.35);
+  }
+  h1 {
+    font-size: 1.3rem;
+    margin: 0 0 4px;
+  }
+  p.sub {
+    color: var(--muted);
+    margin: 0 0 24px;
+    font-size: 0.9rem;
+  }
+  label {
+    display: block;
+    font-size: 0.82rem;
+    color: var(--muted);
+    margin: 16px 0 6px;
+  }
+  input {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid #30383f;
+    background: #10141822;
+    background: #0f1317;
+    color: var(--text);
+    font-size: 0.95rem;
+  }
+  input:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+  button {
+    margin-top: 24px;
+    width: 100%;
+    padding: 12px;
+    border: none;
+    border-radius: 8px;
+    background: var(--accent-dark);
+    color: white;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  button:hover:not(:disabled) { background: var(--accent); }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .status {
+    margin-top: 20px;
+    font-size: 0.88rem;
+    min-height: 1.2em;
+  }
+  .status.error { color: var(--error); }
+  .status.success { color: var(--success); }
+  .status.working { color: var(--muted); }
+  a.download-btn {
+    display: block;
+    margin-top: 14px;
+    text-align: center;
+    padding: 12px;
+    border-radius: 8px;
+    background: var(--success);
+    color: #0f1317;
+    font-weight: 700;
+    text-decoration: none;
+  }
+  .expiry-note {
+    margin-top: 8px;
+    font-size: 0.78rem;
+    color: var(--muted);
+  }
+  .spinner {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid var(--muted);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin-right: 8px;
+    vertical-align: -2px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>Classical Archive Downloader</h1>
+    <p class="sub">Paste a link, enter your archive credentials, and we'll fetch it for you.</p>
+
+    <form id="form">
+      <label for="url">Archive link</label>
+      <input type="url" id="url" placeholder="https://example.org/track-or-album" required>
+
+      <label for="username">Username</label>
+      <input type="text" id="username" placeholder="you@example.com" required autocomplete="username">
+
+      <label for="password">Password</label>
+      <input type="password" id="password" placeholder="••••••••" required autocomplete="current-password">
+
+      <button type="submit" id="submitBtn">Download</button>
+    </form>
+
+    <div id="status" class="status"></div>
+    <div id="downloadArea"></div>
+  </div>
+
+<script>
+const form = document.getElementById('form');
+const submitBtn = document.getElementById('submitBtn');
+const statusEl = document.getElementById('status');
+const downloadArea = document.getElementById('downloadArea');
+let pollTimer = null;
+
+function setStatus(text, cls) {
+  statusEl.className = 'status ' + (cls || '');
+  statusEl.innerHTML = text;
+}
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  clearInterval(pollTimer);
+  downloadArea.innerHTML = '';
+  submitBtn.disabled = true;
+
+  const payload = {
+    url: document.getElementById('url').value.trim(),
+    username: document.getElementById('username').value.trim(),
+    password: document.getElementById('password').value,
+  };
+
+  setStatus('<span class="spinner"></span>Submitting job…', 'working');
+
+  try {
+    const res = await fetch('/api/submit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setStatus(data.error || 'Something went wrong.', 'error');
+      submitBtn.disabled = false;
+      return;
+    }
+    pollStatus(data.job_id);
+  } catch (err) {
+    setStatus('Network error: ' + err.message, 'error');
+    submitBtn.disabled = false;
+  }
+});
+
+function pollStatus(jobId) {
+  setStatus('<span class="spinner"></span>Downloading…', 'working');
+  pollTimer = setInterval(async () => {
+    try {
+      const res = await fetch('/api/status/' + jobId);
+      const data = await res.json();
+      if (!res.ok) {
+        clearInterval(pollTimer);
+        setStatus(data.error || 'Job not found.', 'error');
+        submitBtn.disabled = false;
+        return;
+      }
+      if (data.status === 'success') {
+        clearInterval(pollTimer);
+        setStatus('Done! File ready.', 'success');
+        downloadArea.innerHTML =
+          '<a class="download-btn" href="' + data.download_url + '" download>Download ' + data.file_name + '</a>' +
+          '<div class="expiry-note">This file will be removed from the server after 1 hour.</div>';
+        submitBtn.disabled = false;
+      } else if (data.status === 'error') {
+        clearInterval(pollTimer);
+        setStatus('Failed: ' + (data.error || 'unknown error'), 'error');
+        submitBtn.disabled = false;
+      }
+      // pending/running -> keep polling
+    } catch (err) {
+      clearInterval(pollTimer);
+      setStatus('Network error: ' + err.message, 'error');
+      submitBtn.disabled = false;
+    }
+  }, 2000);
+}
+</script>
+</body>
+</html>
