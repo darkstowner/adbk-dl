@@ -66,8 +66,8 @@ def run_job(job_id, url, username, password):
 
     cmd = [
         "audiobook-dl",
-        "--username", "'",username,"'",
-        "--password", "'",password,"'",
+        "--username","'",username,"'",
+        "--password","'",password,"'",
         "--combine",
         url,
     ]
