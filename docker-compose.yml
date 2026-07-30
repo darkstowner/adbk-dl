@@ -1,7 +1,15 @@
 services:
   musicdl:
-    build: ./app
-    container_name: adbk-dl
+    build:
+      # Builds directly from the upstream repo instead of the local ./app folder.
+      # Requires a Dockerfile at the root of that repo (or add `dockerfile:` below
+      # pointing at its path, e.g. dockerfile: docker/Dockerfile).
+      # NOTE: as of the last check, this repo only contains a README — this build
+      # will fail until app.py, requirements.txt, and a Dockerfile actually exist there.
+      context: https://github.com/darkstowner/adbk-dl.git
+      # Pin to a branch/tag/commit instead of always floating on main, e.g.:
+      # context: https://github.com/darkstowner/adbk-dl.git#main
+    container_name: musicdl
     restart: unless-stopped
     ports:
       - "5000:5000"
@@ -10,6 +18,9 @@ services:
     environment:
       # How long a finished job's file stays on disk before cleanup, in seconds.
       - FILE_TTL_SECONDS=3600
+      # The CLI command to invoke, if the app still shells out to a binary
+      # rather than calling adbk-dl as a library. Update once known.
+      - DOWNLOAD_CMD=database-dl
 
 volumes:
   downloads:
