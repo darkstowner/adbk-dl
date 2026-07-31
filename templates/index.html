@@ -123,13 +123,13 @@
 
     <form id="form">
       <label for="url">Archive link</label>
-      <input type="url" id="url" placeholder="https://example.org/track-or-album" required>
+      <input type="url" id="url" name="url" placeholder="https://example.org/track-or-album" required>
 
       <label for="username">Username</label>
-      <input type="text" id="username" placeholder="you@example.com" required autocomplete="username">
+      <input type="text" id="username" name="username" placeholder="you@example.com" required autocomplete="username">
 
       <label for="password">Password</label>
-      <input type="password" id="password" placeholder="••••••••" required autocomplete="current-password">
+      <input type="password" id="password" name="password" placeholder="••••••••" required autocomplete="current-password">
 
       <button type="submit" id="submitBtn">Download</button>
     </form>
@@ -148,6 +148,25 @@ let pollTimer = null;
 function setStatus(text, cls) {
   statusEl.className = 'status ' + (cls || '');
   statusEl.innerHTML = text;
+}
+
+// Ask the browser to offer saving these credentials, if it supports the
+// Credential Management API. This is needed because our form submits via
+// fetch() instead of a normal navigation, so browsers can't always infer
+// on their own that a login just happened.
+async function offerToSaveCredentials(username, password) {
+  if (!window.PasswordCredential) return;
+  try {
+    const cred = new PasswordCredential({
+      id: username,
+      password: password,
+      name: username,
+    });
+    await navigator.credentials.store(cred);
+  } catch (err) {
+    // Non-fatal: saving is a nice-to-have, never block the flow on it.
+    console.warn('Could not offer to save credentials:', err);
+  }
 }
 
 form.addEventListener('submit', async (e) => {
@@ -176,14 +195,14 @@ form.addEventListener('submit', async (e) => {
       submitBtn.disabled = false;
       return;
     }
-    pollStatus(data.job_id);
+    pollStatus(data.job_id, payload);
   } catch (err) {
     setStatus('Network error: ' + err.message, 'error');
     submitBtn.disabled = false;
   }
 });
 
-function pollStatus(jobId) {
+function pollStatus(jobId, payload) {
   setStatus('<span class="spinner"></span>Downloading…', 'working');
   pollTimer = setInterval(async () => {
     try {
@@ -202,6 +221,8 @@ function pollStatus(jobId) {
           '<a class="download-btn" href="' + data.download_url + '" download>Download ' + data.file_name + '</a>' +
           '<div class="expiry-note">This file will be removed from the server after 1 hour.</div>';
         submitBtn.disabled = false;
+        // Credentials worked (job succeeded) — offer to save them.
+        offerToSaveCredentials(payload.username, payload.password);
       } else if (data.status === 'error') {
         clearInterval(pollTimer);
         setStatus('Failed: ' + (data.error || 'unknown error'), 'error');
