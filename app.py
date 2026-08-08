@@ -156,6 +156,7 @@ def submit():
     data = request.get_json(silent=True) or request.form
     url = (data.get("url") or "").strip()
     url = url.split("?", 1)[0]
+
     username = (data.get("username") or "").strip()
     password = data.get("password") or ""
     if not url or not username or not password:
