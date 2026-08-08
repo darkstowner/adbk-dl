@@ -155,19 +155,16 @@ def index():
 def submit():
     data = request.get_json(silent=True) or request.form
     url = (data.get("url") or "").strip()
+    url = url.split("?", 1)[0]
     username = (data.get("username") or "").strip()
     password = data.get("password") or ""
-
     if not url or not username or not password:
         return jsonify({"error": "url, username, and password are all required."}), 400
-
     if not URL_RE.match(url):
         return jsonify({"error": "Please enter a valid http(s) URL."}), 400
-
     job_id = make_job(url, username)
     thread = threading.Thread(target=run_job, args=(job_id, url, username, password), daemon=True)
     thread.start()
-
     return jsonify({"job_id": job_id})
 
 
